@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Surgical Assistant — Near East University</title>
+<style>
+  :root {
+    --bg-dark:   #0d1117; --bg-panel: #161b22; --bg-card: #1c2128;
+    --accent:    #58a6ff; --green:    #3fb950;  --red:    #f85149;
+    --yellow:    #d29922; --cyan:     #39d0d8;
+    --text-dim:  #8b949e; --text:     #e6edf3;  --border: #30363d;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg-dark); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; overflow-x: hidden; }
+
+  /* ── NAV ─────────────────────────────────────── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(13,17,23,.88); backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 32px; transition: padding .3s;
+    animation: slideDown .5s ease;
+  }
+  @keyframes slideDown { from{transform:translateY(-60px);opacity:0} to{transform:translateY(0);opacity:1} }
+  .nav-brand { display:flex; align-items:center; gap:12px; }
+  .nav-logo  { height:44px; border-radius:6px; }
+  .nav-title { display:flex; flex-direction:column; font-size:.78rem; color:var(--text-dim); line-height:1.3; }
+  .nav-title strong { font-size:1rem; color:var(--text); }
+  .nav-links { display:flex; gap:24px; }
+  .nav-links a { color:var(--text-dim); text-decoration:none; font-size:.9rem; transition:color .2s; }
+  .nav-links a:hover { color:var(--accent); }
+
+  /* ── HERO ────────────────────────────────────── */
+  .hero { position:relative; height:100vh; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+  .hero-video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:.22; filter:saturate(.5); }
+  .hero-overlay { position:absolute; inset:0; background:linear-gradient(180deg,rgba(13,17,23,.3) 0%,rgba(13,17,23,.65) 60%,rgba(13,17,23,1) 100%); }
+  .hero-content { position:relative; text-align:center; max-width:760px; padding:0 24px; animation:fadeUp .9s ease .2s both; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+  .hero-badge { display:inline-flex; align-items:center; gap:8px; background:rgba(88,166,255,.12); border:1px solid rgba(88,166,255,.3); color:var(--accent); border-radius:20px; padding:5px 16px; font-size:.78rem; letter-spacing:.05em; margin-bottom:20px; }
+  .hero-badge .dot { width:7px; height:7px; border-radius:50%; background:var(--green); animation:blink 1.4s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+  .hero h1 { font-size:clamp(2rem,5vw,3.4rem); font-weight:800; line-height:1.15; background:linear-gradient(135deg,#e6edf3,var(--accent)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; margin-bottom:18px; }
+  .hero p { color:var(--text-dim); font-size:1.1rem; line-height:1.7; margin-bottom:32px; }
+  .hero-btns { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
+  .btn { padding:13px 28px; border-radius:8px; font-size:.95rem; font-weight:600; cursor:pointer; border:none; transition:all .25s; display:inline-flex; align-items:center; gap:8px; text-decoration:none; }
+  .btn-primary { background:var(--accent); color:#0d1117; }
+  .btn-primary:hover { background:#79b8ff; transform:translateY(-2px); box-shadow:0 8px 24px rgba(88,166,255,.35); }
+  .btn-outline { background:transparent; color:var(--text); border:1px solid var(--border); }
+  .btn-outline:hover { border-color:var(--accent); color:var(--accent); }
+  .scroll-hint { position:absolute; bottom:30px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--text-dim); font-size:.75rem; animation:bounce 2s infinite; }
+  @keyframes bounce { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(8px)} }
+
+  /* ── SECTIONS ────────────────────────────────── */
+  section { padding:88px 32px; max-width:1200px; margin:0 auto; }
+  .section-label { font-size:.75rem; letter-spacing:.12em; color:var(--accent); text-transform:uppercase; margin-bottom:8px; }
+  .section-title { font-size:clamp(1.6rem,3vw,2.4rem); font-weight:700; margin-bottom:16px; }
+  .section-sub   { color:var(--text-dim); max-width:520px; line-height:1.7; margin-bottom:52px; }
+
+  /* ── STATS ───────────────────────────────────── */
+  .stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:20px; margin-bottom:52px; }
+  .stat-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:28px 24px; text-align:center; opacity:0; transform:scale(.95); }
+  .stat-card.visible { animation:statIn .5s ease forwards; }
+  @keyframes statIn { to{opacity:1;transform:scale(1)} }
+  .stat-num { font-size:2.6rem; font-weight:800; background:linear-gradient(135deg,var(--accent),var(--cyan)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .stat-label { color:var(--text-dim); font-size:.85rem; margin-top:8px; }
+
+  /* ── FEATURES ────────────────────────────────── */
+  .features-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px; }
+  .feat-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:28px; transition:transform .3s,border-color .3s,box-shadow .3s; opacity:0; transform:translateY(20px); }
+  .feat-card.visible { animation:cardIn .5s ease forwards; }
+  @keyframes cardIn { to{opacity:1;transform:translateY(0)} }
+  .feat-card:hover { transform:translateY(-4px) !important; border-color:var(--accent); box-shadow:0 12px 32px rgba(88,166,255,.15); }
+  .feat-icon { width:48px; height:48px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:22px; margin-bottom:18px; }
+  .feat-icon.blue   { background:rgba(88,166,255,.15); }
+  .feat-icon.green  { background:rgba(63,185,80,.15); }
+  .feat-icon.red    { background:rgba(248,81,73,.15); }
+  .feat-icon.yellow { background:rgba(210,153,34,.15); }
+  .feat-icon.cyan   { background:rgba(57,208,216,.15); }
+  .feat-icon.purple { background:rgba(188,140,255,.15); }
+  .feat-card h3 { font-size:1.05rem; font-weight:600; margin-bottom:8px; }
+  .feat-card p  { color:var(--text-dim); font-size:.88rem; line-height:1.6; }
+
+  /* ── SERVER WARNING BANNER ───────────────────── */
+  #serverWarning {
+    display:none; margin-bottom:28px;
+    background:rgba(210,153,34,.12); border:1px solid rgba(210,153,34,.35);
+    border-radius:12px; padding:20px 24px;
+    align-items:flex-start; gap:14px;
+  }
+  #serverWarning .warn-icon { font-size:1.5rem; flex-shrink:0; margin-top:2px; }
+  #serverWarning h4 { color:var(--yellow); margin-bottom:6px; font-size:.95rem; }
+  #serverWarning p  { color:var(--text-dim); font-size:.85rem; line-height:1.6; }
+  #serverWarning code { background:rgba(255,255,255,.08); border-radius:4px; padding:1px 6px; font-family:monospace; color:var(--accent); font-size:.85em; }
+
+  /* ── DEMO WRAPPER ────────────────────────────── */
+  .demo-wrapper { background:var(--bg-panel); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+  .demo-header  { background:var(--bg-card); padding:14px 22px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); }
+  .demo-header-left { display:flex; align-items:center; gap:12px; }
+  .traffic-lights { display:flex; gap:6px; }
+  .tl { width:12px; height:12px; border-radius:50%; }
+  .tl-r { background:#ff5f57; } .tl-y { background:#ffbd2e; } .tl-g { background:#28c840; }
+  .demo-title { font-size:.9rem; color:var(--text); font-weight:600; }
+  .demo-clock  { font-family:'Consolas',monospace; font-size:.85rem; color:var(--cyan); }
+
+  .demo-body { display:grid; grid-template-columns:1fr 340px; min-height:520px; }
+
+  /* ── VIDEO PANE ──────────────────────────────── */
+  .demo-video-pane { position:relative; background:#000; overflow:hidden; }
+  .demo-video-pane img,
+  .demo-video-pane .cam-placeholder {
+    width:100%; height:100%; object-fit:cover; display:block; filter:brightness(.9);
+  }
+  .cam-placeholder {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:16px; background:#0a0a0a; color:var(--text-dim); text-align:center; padding:40px;
+    min-height:400px;
+  }
+  .cam-placeholder .spinner {
+    width:44px; height:44px; border:3px solid var(--border); border-top-color:var(--accent);
+    border-radius:50%; animation:spin .9s linear infinite;
+  }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  .cam-placeholder p { font-size:.9rem; line-height:1.6; }
+  .cam-placeholder code { background:rgba(88,166,255,.1); border-radius:4px; padding:2px 8px; color:var(--accent); font-family:monospace; }
+
+  /* scan lines */
+  .demo-video-pane::after { content:''; position:absolute; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.05) 2px,rgba(0,0,0,.05) 4px); pointer-events:none; }
+
+  /* HUD */
+  .hud { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+  .hud-corner { position:absolute; width:28px; height:28px; border-color:var(--accent); border-style:solid; opacity:.7; }
+  .hud-corner.tl { top:10px;left:10px;  border-width:2px 0 0 2px; }
+  .hud-corner.tr { top:10px;right:10px; border-width:2px 2px 0 0; }
+  .hud-corner.bl { bottom:10px;left:10px;  border-width:0 0 2px 2px; }
+  .hud-corner.br { bottom:10px;right:10px; border-width:0 2px 2px 0; }
+  .hud-fps    { position:absolute; top:14px;right:14px; font-family:monospace; font-size:.72rem; color:var(--cyan); background:rgba(0,0,0,.55); padding:2px 8px; border-radius:4px; }
+  .hud-status { position:absolute; bottom:14px;left:14px; font-size:.72rem; color:var(--text); background:rgba(0,0,0,.55); padding:3px 10px; border-radius:4px; }
+  .hud-rec    { position:absolute; top:14px;left:14px; display:flex;align-items:center;gap:6px; background:rgba(0,0,0,.55); padding:3px 10px; border-radius:4px; font-size:.7rem; color:var(--red); }
+  .hud-rec .rdot { width:7px;height:7px;border-radius:50%;background:var(--red);animation:blink 1s infinite; }
+
+  .surgery-ring { position:absolute; inset:0; border:2px solid transparent; pointer-events:none; transition:border-color .5s,box-shadow .5s; }
+  .surgery-ring.active  { border-color:rgba(63,185,80,.45); box-shadow:inset 0 0 40px rgba(63,185,80,.08); }
+  .surgery-ring.ending  { border-color:rgba(248,81,73,.5);  box-shadow:inset 0 0 40px rgba(248,81,73,.14); animation:endPulse .55s ease 3; }
+  @keyframes endPulse { 0%,100%{box-shadow:inset 0 0 40px rgba(248,81,73,.12)} 50%{box-shadow:inset 0 0 80px rgba(248,81,73,.35)} }
+
+  /* ── CONTROLS PANEL ──────────────────────────── */
+  .demo-controls { background:var(--bg-card); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+  .ctrl-section  { padding:13px 15px; border-bottom:1px solid var(--border); }
+  .ctrl-title    { font-size:.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:.08em; margin-bottom:9px; }
+
+  .surgery-btns { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .btn-start-surgery, .btn-end-surgery { padding:10px; border-radius:8px; font-size:.85rem; font-weight:700; cursor:pointer; border:none; transition:all .25s; }
+  .btn-start-surgery { background:var(--green); color:#0d1117; }
+  .btn-start-surgery:hover:not(:disabled) { background:#56d364; box-shadow:0 0 18px rgba(63,185,80,.5); }
+  .btn-start-surgery:disabled { background:var(--bg-panel); color:var(--text-dim); cursor:not-allowed; }
+  .btn-end-surgery { background:var(--bg-panel); color:var(--text-dim); border:1px solid var(--border); }
+  .btn-end-surgery.armed { background:var(--red); color:#fff; border-color:var(--red); }
+  .btn-end-surgery.armed:hover { background:#ff6b6b; box-shadow:0 0 18px rgba(248,81,73,.45); }
+  .btn-end-surgery:disabled { cursor:not-allowed; }
+  .surgery-timer { text-align:center; font-family:monospace; font-size:1.5rem; color:var(--cyan); padding:8px 0 0; letter-spacing:.06em; }
+
+  .tool-scroll { max-height:220px; overflow-y:auto; padding-right:2px; }
+  .tool-scroll::-webkit-scrollbar { width:3px; }
+  .tool-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  .tool-row { display:flex; align-items:center; gap:7px; padding:5px 2px; border-bottom:1px solid rgba(48,54,61,.5); transition:background .2s; }
+  .tool-row:hover { background:rgba(88,166,255,.05); }
+  .tool-dot  { width:8px; height:8px; border-radius:50%; flex-shrink:0; transition:background .4s; }
+  .tool-name { font-size:.78rem; flex:1; color:var(--text); }
+  .tool-badge{ font-size:.62rem; font-weight:700; padding:1px 6px; border-radius:10px; transition:all .3s; }
+  .tool-time { font-family:monospace; font-size:.7rem; color:var(--cyan); min-width:32px; text-align:right; }
+  .tool-bar-wrap { width:36px; height:3px; background:var(--bg-dark); border-radius:2px; overflow:hidden; }
+  .tool-bar-fill { height:100%; background:var(--accent); width:0%; transition:width 1s linear; border-radius:2px; }
+
+  .evt-log { flex:1; overflow-y:auto; padding:7px 12px; font-family:monospace; font-size:.69rem; line-height:1.7; min-height:90px; max-height:200px; }
+  .evt-log::-webkit-scrollbar { width:3px; }
+  .evt-log::-webkit-scrollbar-thumb { background:var(--border); }
+  .log-line { padding:1px 0; }
+  .log-ts  { color:var(--text-dim); }
+  .log-ok  { color:var(--green); }
+  .log-warn{ color:var(--yellow); }
+  .log-ai  { color:var(--cyan); }
+  .log-err { color:var(--red); }
+  .log-    { color:var(--text-dim); }
+
+  /* ── Export button ───────────────────────────── */
+  .btn-export {
+    width:100%; padding:9px 12px; border-radius:7px; border:1px solid var(--border);
+    background:var(--bg-panel); color:var(--accent); font-size:.8rem; font-weight:600;
+    cursor:pointer; transition:all .25s; display:flex; align-items:center; justify-content:center; gap:7px;
+  }
+  .btn-export:hover { background:rgba(88,166,255,.12); border-color:var(--accent); }
+  .btn-export:disabled { opacity:.4; cursor:not-allowed; }
+
+  /* ── Sensitivity slider ──────────────────────── */
+  .sens-row { display:flex; align-items:center; gap:7px; margin-bottom:9px; }
+  .sens-row label { font-size:.67rem; color:var(--text-dim); white-space:nowrap; }
+  input[type="range"].sens-slider {
+    flex:1; -webkit-appearance:none; height:4px;
+    background:var(--border); border-radius:2px; outline:none; cursor:pointer;
+  }
+  input[type="range"].sens-slider::-webkit-slider-thumb {
+    -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
+    background:var(--accent); cursor:pointer; transition:background .2s, transform .15s;
+  }
+  input[type="range"].sens-slider::-webkit-slider-thumb:hover { background:#79b8ff; transform:scale(1.2); }
+  .sens-val { font-family:monospace; font-size:.85rem; font-weight:700; color:var(--accent); min-width:34px; text-align:right; }
+  .preset-row { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin-top:4px; }
+  .btn-preset {
+    background:var(--bg-dark); color:var(--text-dim); border:1px solid var(--border);
+    border-radius:5px; padding:5px 2px; font-size:.63rem; cursor:pointer;
+    transition:all .18s; line-height:1.35; text-align:center;
+  }
+  .btn-preset:hover        { border-color:var(--accent); color:var(--accent); }
+  .btn-preset.active-pre   { border-color:var(--accent); color:var(--accent); background:rgba(88,166,255,.1); }
+
+  /* ── Per-tool score badge ────────────────────── */
+  .tool-score {
+    font-family:monospace; font-size:.6rem; min-width:30px; text-align:right;
+    color:var(--text-dim); transition:color .3s;
+  }
+  .tool-score.hot  { color:var(--green); }
+  .tool-score.warm { color:var(--yellow); }
+
+  /* ── TOOLS GALLERY ───────────────────────────── */
+  .tools-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; }
+  .tool-chip { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:14px 12px; text-align:center; font-size:.8rem; transition:all .25s; opacity:0; }
+  .tool-chip.visible { animation:cardIn .4s ease forwards; }
+  .tool-chip:hover { border-color:var(--accent); background:rgba(88,166,255,.08); transform:translateY(-2px); }
+  .tool-chip .chip-icon { font-size:1.5rem; margin-bottom:6px; }
+  .tool-chip .chip-name { color:var(--text-dim); font-size:.72rem; }
+
+  /* ── AI SECTION ──────────────────────────────── */
+  .ai-section { background:linear-gradient(135deg,rgba(88,166,255,.07),rgba(57,208,216,.05)); border:1px solid rgba(88,166,255,.2); border-radius:16px; padding:48px; position:relative; overflow:hidden; }
+  .ai-section::before { content:''; position:absolute; top:-60px; right:-60px; width:300px; height:300px; border-radius:50%; background:radial-gradient(circle,rgba(88,166,255,.12),transparent 70%); pointer-events:none; }
+  .ai-grid { display:grid; grid-template-columns:1fr 1fr; gap:40px; align-items:center; }
+  .ai-features { list-style:none; display:flex; flex-direction:column; gap:14px; margin-top:24px; }
+  .ai-features li { display:flex; align-items:flex-start; gap:12px; }
+  .ai-features li::before { content:'✦'; color:var(--accent); font-size:.75rem; margin-top:2px; flex-shrink:0; }
+  .ai-features li span { color:var(--text-dim); font-size:.9rem; line-height:1.5; }
+  .ai-report-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:20px; font-family:monospace; font-size:.8rem; line-height:1.7; }
+  .ai-report-card .ai-header { display:flex; align-items:center; gap:8px; margin-bottom:14px; color:var(--cyan); font-weight:600; }
+  .ai-report-card .ai-text { color:var(--text-dim); }
+  .typing-cursor { display:inline-block; width:2px; height:1em; background:var(--accent); animation:blink .8s infinite; vertical-align:text-bottom; }
+
+  /* ── FOOTER ──────────────────────────────────── */
+  footer { background:var(--bg-panel); border-top:1px solid var(--border); padding:40px 32px; text-align:center; }
+  footer img { height:52px; border-radius:8px; margin-bottom:16px; filter:brightness(.9); }
+  footer p { color:var(--text-dim); font-size:.85rem; line-height:1.7; }
+  footer .footer-links { display:flex; gap:20px; justify-content:center; margin-top:20px; flex-wrap:wrap; }
+  footer .footer-links a { color:var(--text-dim); text-decoration:none; font-size:.83rem; transition:color .2s; }
+  footer .footer-links a:hover { color:var(--accent); }
+
+  /* ── TOAST ───────────────────────────────────── */
+  #toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:13px 22px; font-size:.88rem; color:var(--text); transition:transform .35s ease; z-index:200; white-space:nowrap; box-shadow:0 8px 32px rgba(0,0,0,.5); }
+  #toast.show { transform:translateX(-50%) translateY(0); }
+
+  @media (max-width:800px) {
+    .demo-body { grid-template-columns:1fr; }
+    .demo-controls { border-left:none; border-top:1px solid var(--border); }
+    .ai-grid { grid-template-columns:1fr; }
+    .nav-links { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── NAV ───────────────────────────────────────────── -->
+<nav id="mainNav">
+  <div class="nav-brand">
+    <img src="okul logo.png" alt="NEU" class="nav-logo">
+    <div class="nav-title">
+      <span>Near East University</span>
+      <strong>Smart Surgical Assistant</strong>
+    </div>
+  </div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#demo">Live Demo</a>
+    <a href="#tools">Tools</a>
+    <a href="#ai">AI</a>
+  </div>
+</nav>
+
+<!-- ── HERO ──────────────────────────────────────────── -->
+<div class="hero">
+  <video class="hero-video" src="ameliyat video.mp4" autoplay muted loop playsinline></video>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="hero-badge">
+      <span class="dot"></span>YOLOv8 + MediaPipe + DeepSeek AI
+    </div>
+    <h1>Real-Time Intelligence<br>for the Operating Room</h1>
+    <p>Instantly detect 16 surgical instruments from your camera, track hand movements, receive missing-tool alerts, and access AI-powered session reports.</p>
+    <div class="hero-btns">
+      <a href="#demo" class="btn btn-primary">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M6 5.5l5 2.5-5 2.5V5.5z" fill="currentColor" stroke="none"/></svg>
+        Start Camera
+      </a>
+      <a href="#features" class="btn btn-outline">Explore Features</a>
+    </div>
+  </div>
+  <div class="scroll-hint">
+    <span>Scroll down</span>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+  </div>
+</div>
+
+<!-- ── STATS ─────────────────────────────────────────── -->
+<section style="padding-top:64px;padding-bottom:24px;">
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-num" data-count="16">0</div><div class="stat-label">Surgical Tool Types Detected</div></div>
+    <div class="stat-card"><div class="stat-num" data-count="30">0</div><div class="stat-label">Frames Per Second Processing</div></div>
+    <div class="stat-card"><div class="stat-num" data-count="4">0</div><div class="stat-label">Simultaneous Hand Tracking</div></div>
+    <div class="stat-card"><div class="stat-num" data-count="95">0</div><div class="stat-label">% Detection Accuracy</div></div>
+  </div>
+</section>
+
+<!-- ── FEATURES ──────────────────────────────────────── -->
+<section id="features">
+  <div class="section-label">Capabilities</div>
+  <div class="section-title">What the System Can Do</div>
+  <p class="section-sub">Real-time computer vision and AI integration brings surgical safety to a new level.</p>
+  <div class="features-grid">
+    <div class="feat-card"><div class="feat-icon blue">🎯</div><h3>Tool Detection (YOLOv8)</h3><p>The YOLOv8 model detects 16 different surgical instruments in real time from the live camera feed with 95%+ accuracy and marks them with colored bounding boxes.</p></div>
+    <div class="feat-card"><div class="feat-icon green">✋</div><h3>Hand Tracking (MediaPipe)</h3><p>Simultaneous tracking of up to 4 hands via MediaPipe Hand Landmarker. Determines whether a tool is in-hand or on the table using an IoU overlap score.</p></div>
+    <div class="feat-card"><div class="feat-icon cyan">⏱</div><h3>Usage Time Measurement</h3><p>Records the in-hand duration of each tool frame by frame. Displays how many times it was picked up and the total usage time.</p></div>
+    <div class="feat-card"><div class="feat-icon red">🚨</div><h3>Missing Tool Alert</h3><p>Counts tools present at surgery start; provides an audio and visual red alert for any tool missing at the end of the procedure.</p></div>
+    <div class="feat-card"><div class="feat-icon yellow">🤖</div><h3>AI Surgical Report</h3><p>DeepSeek-R1 automatically analyses all tool usage data every 15 seconds and generates a concise, professional assessment for the surgeon.</p></div>
+    <div class="feat-card"><div class="feat-icon purple">📄</div><h3>CSV, PDF &amp; Excel Export</h3><p>At the end of the session all events, tool durations and AI reports are automatically saved as CSV, PDF and Excel (.xlsx) files.</p></div>
+  </div>
+</section>
+
+<!-- ── DEMO ───────────────────────────────────────────── -->
+<section id="demo" style="padding-top:20px;">
+  <div class="section-label">Live System</div>
+  <div class="section-title">Real-Time Detection via Camera</div>
+  <p class="section-sub">Start the surgery — monitor and track instruments from your camera in real time.</p>
+
+  <!-- Server warning (shown when opened via file:// protocol) -->
+  <div id="serverWarning">
+    <div class="warn-icon">⚠</div>
+    <div>
+      <h4>Flask server is not running</h4>
+      <p>Start the server first for the live camera stream:<br>
+        In the terminal: <code>cd C:\Users\baris\Desktop\medical</code> then <code>.venv\Scripts\python server.py</code><br>
+        Or double-click <strong>run.bat</strong>. Then open <code>http://localhost:5000</code>.
+      </p>
+    </div>
+  </div>
+
+  <div class="demo-wrapper">
+    <!-- Title bar -->
+    <div class="demo-header">
+      <div class="demo-header-left">
+        <div class="traffic-lights"><div class="tl tl-r"></div><div class="tl tl-y"></div><div class="tl tl-g"></div></div>
+        <span class="demo-title">Smart Surgical Assistant — v3.0  |  NEU</span>
+      </div>
+      <span class="demo-clock" id="demoClock">--:--:--</span>
+    </div>
+
+    <div class="demo-body">
+      <!-- Camera stream -->
+      <div class="demo-video-pane" id="videoPaneWrap">
+
+        <!-- MJPEG stream (visible when server is running) -->
+        <img id="liveStream" src="/video_feed" alt="Camera Stream"
+             style="display:none;"
+             onerror="onStreamError()" onload="onStreamLoad()">
+
+        <!-- Placeholder (shown when server is offline) -->
+        <div class="cam-placeholder" id="camPlaceholder">
+          <div class="spinner"></div>
+          <p>Connecting to server…<br>
+            Is <code>python server.py</code> running?</p>
+        </div>
+
+        <!-- HUD -->
+        <div class="hud" id="hudLayer" style="display:none;">
+          <div class="hud-corner tl"></div>
+          <div class="hud-corner tr"></div>
+          <div class="hud-corner bl"></div>
+          <div class="hud-corner br"></div>
+          <div class="hud-rec"><span class="rdot"></span>LIVE</div>
+          <div class="hud-fps"    id="hudFps">FPS: --</div>
+          <div class="hud-status" id="hudStatus">Connecting...</div>
+        </div>
+        <div class="surgery-ring" id="surgeryRing"></div>
+      </div>
+
+      <!-- Control panel -->
+      <div class="demo-controls">
+
+        <!-- Surgery control -->
+        <div class="ctrl-section">
+          <div class="ctrl-title">Surgery Control</div>
+          <div class="surgery-btns">
+            <button class="btn-start-surgery" id="btnStart" onclick="startSurgery()">▶ Start</button>
+            <button class="btn-end-surgery"   id="btnEnd"   onclick="endSurgery()" disabled>■ End</button>
+          </div>
+          <div class="surgery-timer" id="surgeryTimer">--:--:--</div>
+        </div>
+
+        <!-- Detection Sensitivity -->
+        <div class="ctrl-section">
+          <div class="ctrl-title">Detection Sensitivity</div>
+
+          <!-- Slider row -->
+          <div class="sens-row">
+            <label>Loose</label>
+            <input type="range" id="threshSlider" class="sens-slider"
+                   min="5" max="80" step="1" value="20"
+                   oninput="onSliderMove(this.value)">
+            <label>Strict</label>
+            <span class="sens-val" id="threshVal">0.20</span>
+          </div>
+
+          <!-- Threshold bar: shows where threshold sits on 0→1 scale -->
+          <div style="position:relative;height:6px;background:var(--bg-dark);border-radius:3px;margin-bottom:9px;overflow:visible;">
+            <!-- gradient fill up to threshold -->
+            <div id="threshFill" style="position:absolute;left:0;top:0;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--green),var(--yellow),var(--red));transition:width .2s;width:22.2%;"></div>
+            <!-- threshold marker line -->
+            <div id="threshLine" style="position:absolute;top:-3px;width:2px;height:12px;background:var(--accent);border-radius:1px;transition:left .2s;left:22.2%;transform:translateX(-50%);"></div>
+          </div>
+
+          <!-- Presets -->
+          <div class="preset-row">
+            <button class="btn-preset" onclick="applyPreset(8)"  title="Very sensitive — triggers with slight touch">High<br>0.08</button>
+            <button class="btn-preset" onclick="applyPreset(15)" title="Sensitive">Med-Lo<br>0.15</button>
+            <button class="btn-preset active-pre" id="pre20" onclick="applyPreset(20)" title="Default">Normal<br>0.20</button>
+            <button class="btn-preset" onclick="applyPreset(40)" title="Strict — requires firm overlap">Strict<br>0.40</button>
+          </div>
+
+          <!-- Help text -->
+          <div style="font-size:.63rem;color:var(--text-dim);margin-top:8px;line-height:1.5;">
+            Score shown per tool (right column).<br>
+            <span style="color:var(--green);">●</span> above threshold → IN HAND &nbsp;
+            <span style="color:var(--yellow);">●</span> below → not triggered.
+          </div>
+        </div>
+
+        <!-- Tool statuses -->
+        <div class="ctrl-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
+          <div class="ctrl-title">Tool Status</div>
+          <div class="tool-scroll" id="toolList"></div>
+        </div>
+
+        <!-- Event log -->
+        <div class="ctrl-section" style="padding:8px 0 0;border-bottom:none;display:flex;flex-direction:column;min-height:100px;">
+          <div class="ctrl-title" style="padding:0 14px;">Event Log</div>
+          <div class="evt-log" id="evtLog">
+            <div class="log-line"><span class="log-ts">[--:--:--]</span> <span class="log-ok">Waiting for server...</span></div>
+          </div>
+        </div>
+
+        <!-- Excel export button -->
+        <div class="ctrl-section" style="border-bottom:none;">
+          <button class="btn-export" id="btnExcel" onclick="exportExcel()" title="Download session report as Excel (.xlsx)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            Export Excel Report (.xlsx)
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── TOOLS GALLERY ──────────────────────────────────── -->
+<section id="tools">
+  <div class="section-label">Detected Instruments</div>
+  <div class="section-title">16 Surgical Tools</div>
+  <p class="section-sub">The model can simultaneously recognise and track the following 16 surgical instruments.</p>
+  <div class="tools-grid" id="toolsGrid"></div>
+</section>
+
+<!-- ── AI SECTION ─────────────────────────────────────── -->
+<section id="ai" style="padding-top:20px;">
+  <div class="ai-section">
+    <div class="ai-grid">
+      <div>
+        <div class="section-label">Artificial Intelligence</div>
+        <div class="section-title" style="margin-bottom:0;">DeepSeek-R1<br>Surgical Analysis</div>
+        <ul class="ai-features">
+          <li><span>Automatically analyses all tool durations and states every 15 seconds</span></li>
+          <li><span>Generates audio and visual alerts for tools held too long</span></li>
+          <li><span>Evaluates surgical workflow and detects anomalies</span></li>
+          <li><span>Keeps the surgeon informed in real time via TTS voice engine</span></li>
+          <li><span>All reports can be exported as CSV, PDF, and Excel</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="ai-report-card">
+          <div class="ai-header">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="7" opacity=".3"/><path d="M5 8h6M8 5v6" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            AI Report — <span id="aiTimestamp">--:--:--</span>
+          </div>
+          <div class="ai-text" id="aiTypedText"></div>
+          <span class="typing-cursor"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────── -->
+<footer>
+  <img src="okul logo.png" alt="Near East University">
+  <p>
+    <strong style="color:var(--text);">Near East University</strong><br>
+    Faculty of Engineering — Computer Engineering<br>
+    Smart Surgical Instrument Tracking System · YOLOv8 + MediaPipe + DeepSeek
+  </p>
+  <div class="footer-links">
+    <a href="#">Project Report</a>
+    <a href="#">Model Training</a>
+    <a href="#">Team</a>
+    <a href="#">Source Code</a>
+  </div>
+</footer>
+
+<div id="toast"></div>
+
+<!-- ── JAVASCRIPT ─────────────────────────────────────── -->
+<script>
+// ── Constants ──────────────────────────────────────────
+const TOOLS = [
+  {id:"army_navy",   icon:"🔧", label:"Army Navy"},
+  {id:"bulldog",     icon:"🗜",  label:"Bulldog"},
+  {id:"castroviejo", icon:"✂️",  label:"Castroviejo"},
+  {id:"clamp",       icon:"🔩", label:"Clamp"},
+  {id:"forceps",     icon:"🥢", label:"Forceps"},
+  {id:"frazier",     icon:"💉", label:"Frazier"},
+  {id:"hemostat",    icon:"🩺", label:"Hemostat"},
+  {id:"iris",        icon:"🔬", label:"Iris"},
+  {id:"mayo_metz",   icon:"✂️",  label:"Mayo-Metz"},
+  {id:"needle",      icon:"🪡", label:"Needle"},
+  {id:"potts",       icon:"🔪", label:"Potts"},
+  {id:"richardson",  icon:"🪝", label:"Richardson"},
+  {id:"scalpel",     icon:"🔪", label:"Scalpel"},
+  {id:"towel_clip",  icon:"📎", label:"Towel Clip"},
+  {id:"weitlaner",   icon:"🔧", label:"Weitlaner"},
+  {id:"yankauer",    icon:"💊", label:"Yankauer"},
+  {id:"scissors",    icon:"✂️",  label:"Scissors"},
+];
+
+const STATUS = {
+  on_table: {color:"#3fb950", text:"ON TABLE"},
+  in_hand:  {color:"#f85149", text:"IN HAND"},
+  missing:  {color:"#d29922", text:"MISSING"},
+};
+
+const IS_SERVER = window.location.protocol.startsWith('http');
+
+// ── Build tool list ────────────────────────────────────
+const toolListEl = document.getElementById("toolList");
+TOOLS.forEach(t => {
+  const row = document.createElement("div");
+  row.className = "tool-row";
+  row.id = "row-" + t.id;
+  row.innerHTML = `
+    <div class="tool-dot"  id="dot-${t.id}"   style="background:#3fb950"></div>
+    <div class="tool-name">${t.label}</div>
+    <div class="tool-bar-wrap"><div class="tool-bar-fill" id="bar-${t.id}"></div></div>
+    <div class="tool-badge"  id="badge-${t.id}" style="background:rgba(63,185,80,.15);color:#3fb950">ON TABLE</div>
+    <div class="tool-time"   id="time-${t.id}">0s</div>
+    <div class="tool-score"  id="score-${t.id}" title="Overlap score">—</div>`;
+  toolListEl.appendChild(row);
+});
+
+// ── Tool gallery ───────────────────────────────────────
+const toolsGrid = document.getElementById("toolsGrid");
+TOOLS.forEach((t, i) => {
+  const chip = document.createElement("div");
+  chip.className = "tool-chip";
+  chip.style.animationDelay = (i * 0.04) + "s";
+  chip.innerHTML = `<div class="chip-icon">${t.icon}</div><div>${t.label}</div><div class="chip-name">${t.id.replace(/_/g,' ')}</div>`;
+  toolsGrid.appendChild(chip);
+});
+
+// ── Intersection Observer ──────────────────────────────
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (!e.isIntersecting) return;
+    e.target.classList.add("visible");
+    const num = e.target.querySelector("[data-count]");
+    if (num) {
+      const target = +num.dataset.count;
+      const start  = performance.now();
+      const tick = now => {
+        const p = Math.min((now-start)/1200, 1);
+        num.textContent = Math.round(p*p*target);
+        if (p < 1) requestAnimationFrame(tick); else num.textContent = target;
+      };
+      requestAnimationFrame(tick);
+    }
+    io.unobserve(e.target);
+  });
+}, {threshold:0.15});
+document.querySelectorAll(".feat-card, .stat-card, .tool-chip").forEach(el => io.observe(el));
+
+// ── Clock ──────────────────────────────────────────────
+function pad(n){ return String(n).padStart(2,'0'); }
+function tickClock(){
+  const d = new Date();
+  document.getElementById("demoClock").textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  document.getElementById("aiTimestamp").textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+setInterval(tickClock,1000); tickClock();
+
+// ── Nav shrink on scroll ───────────────────────────────
+window.addEventListener("scroll", () => {
+  document.getElementById("mainNav").style.padding = window.scrollY > 40 ? "7px 32px" : "10px 32px";
+});
+
+// ── Toast ──────────────────────────────────────────────
+function showToast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+// ── Server connection state ────────────────────────────
+function onStreamLoad(){
+  document.getElementById("liveStream").style.display     = "block";
+  document.getElementById("camPlaceholder").style.display = "none";
+  document.getElementById("hudLayer").style.display       = "block";
+}
+function onStreamError(){
+  document.getElementById("liveStream").style.display     = "none";
+  document.getElementById("camPlaceholder").style.display = "flex";
+  document.getElementById("hudLayer").style.display       = "none";
+  document.getElementById("hudStatus").textContent        = "Cannot connect to server";
+}
+
+// Show server warning when opened via file://
+if (!IS_SERVER){
+  const w = document.getElementById("serverWarning");
+  w.style.display = "flex";
+  document.getElementById("btnStart").disabled  = true;
+  document.getElementById("btnEnd").disabled    = true;
+  document.getElementById("btnExcel").disabled  = true;
+}
+
+// ── Surgery control ────────────────────────────────────
+async function startSurgery(){
+  if (!IS_SERVER){ showToast("Start server.py first!"); return; }
+  try {
+    const res  = await fetch('/api/start', {method:'POST'});
+    const data = await res.json();
+    if (data.ok){
+      document.getElementById("btnStart").disabled = true;
+      document.getElementById("btnEnd").disabled   = false;
+      document.getElementById("btnEnd").classList.add("armed");
+      document.getElementById("surgeryRing").classList.add("active");
+      showToast("Surgery started ✓");
+    }
+  } catch(e){ showToast("Server error: " + e.message); }
+}
+
+async function endSurgery(){
+  if (!IS_SERVER) return;
+  try {
+    const res  = await fetch('/api/end', {method:'POST'});
+    const data = await res.json();
+    if (data.ok){
+      document.getElementById("btnStart").disabled = false;
+      document.getElementById("btnEnd").disabled   = true;
+      document.getElementById("btnEnd").classList.remove("armed");
+      document.getElementById("surgeryRing").classList.remove("active");
+      document.getElementById("surgeryRing").classList.add("ending");
+      setTimeout(() => document.getElementById("surgeryRing").classList.remove("ending"), 1600);
+
+      if (data.missing && data.missing.length > 0){
+        showToast("⚠ Missing tools: " + data.missing.join(', '));
+        document.getElementById("hudStatus").textContent = "⚠ MISSING TOOLS DETECTED!";
+      } else {
+        showToast("All tools verified ✓");
+        document.getElementById("hudStatus").textContent = "✓ All tools verified";
+      }
+    }
+  } catch(e){ showToast("Server error: " + e.message); }
+}
+
+// ── Excel export ───────────────────────────────────────
+async function exportExcel(){
+  if (!IS_SERVER){ showToast("Start server.py first!"); return; }
+  const btn = document.getElementById("btnExcel");
+  btn.disabled = true;
+  btn.textContent = "Generating report…";
+  try {
+    const res = await fetch('/api/export_excel');
+    if (!res.ok){
+      const err = await res.json().catch(() => ({}));
+      showToast("Export error: " + (err.error || res.statusText));
+      return;
+    }
+    // Trigger browser download
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `surgical_report_${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("Excel report downloaded ✓");
+  } catch(e){
+    showToast("Export failed: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> Export Excel Report (.xlsx)`;
+  }
+}
+
+// ── Threshold control ──────────────────────────────────
+let _currentThreshold = 0.20;
+
+function _syncThreshUI(pct) {
+  // pct: integer 5–80
+  const val = (pct / 100).toFixed(2);
+  _currentThreshold = parseFloat(val);
+  document.getElementById("threshVal").textContent    = val;
+  document.getElementById("threshSlider").value       = pct;
+  const fillPct  = (pct / 80 * 100).toFixed(1) + "%";
+  document.getElementById("threshFill").style.width  = fillPct;
+  document.getElementById("threshLine").style.left   = fillPct;
+  // highlight matching preset
+  document.querySelectorAll(".btn-preset").forEach(b => b.classList.remove("active-pre"));
+  document.getElementById("pre20") && document.getElementById("pre20").classList.remove("active-pre");
+}
+
+function onSliderMove(val) {
+  _syncThreshUI(parseInt(val));
+  _pushThreshold(_currentThreshold);
+}
+
+function applyPreset(pct) {
+  _syncThreshUI(pct);
+  _pushThreshold(_currentThreshold);
+  // mark active preset button
+  document.querySelectorAll(".btn-preset").forEach(b => {
+    const match = b.textContent.includes((pct/100).toFixed(2));
+    b.classList.toggle("active-pre", match);
+  });
+}
+
+let _threshTimer = null;
+function _pushThreshold(val) {
+  if (!IS_SERVER) return;
+  clearTimeout(_threshTimer);
+  _threshTimer = setTimeout(async () => {
+    try {
+      await fetch('/api/set_threshold', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({threshold: val})
+      });
+    } catch(e) {}
+  }, 120);   // debounce 120 ms so slider drag doesn't spam the server
+}
+
+// Fetch current threshold from server on load
+async function _fetchConfig() {
+  if (!IS_SERVER) return;
+  try {
+    const r = await fetch('/api/config');
+    const d = await r.json();
+    const pct = Math.round(d.hold_threshold * 100);
+    _syncThreshUI(pct);
+  } catch(e) {}
+}
+
+// ── State polling ──────────────────────────────────────
+let lastSeenEventId = 0;
+
+function updateToolRow(id, state, timerFrames, picks, score, threshold) {
+  const s   = STATUS[state] || STATUS.on_table;
+  const sec = Math.floor(timerFrames / 10);
+
+  const dot   = document.getElementById("dot-"+id);
+  const badge = document.getElementById("badge-"+id);
+  const tEl   = document.getElementById("time-"+id);
+  const bar   = document.getElementById("bar-"+id);
+  const scEl  = document.getElementById("score-"+id);
+
+  if (dot)   dot.style.background  = s.color;
+  if (badge){ badge.textContent = s.text; badge.style.color = s.color; badge.style.background = s.color+"22"; }
+  if (tEl)   tEl.textContent  = sec + "s";
+  if (bar)   bar.style.width  = Math.min(100, (sec/60)*100) + "%";
+
+  // Score display
+  if (scEl) {
+    if (score > 0) {
+      scEl.textContent = score.toFixed(2);
+      scEl.className   = "tool-score " + (score >= threshold ? "hot" : "warm");
+      scEl.title       = `Score: ${score.toFixed(3)}  |  Threshold: ${threshold.toFixed(2)}`;
+    } else {
+      scEl.textContent = "—";
+      scEl.className   = "tool-score";
+      scEl.title       = "Tool not visible";
+    }
+  }
+}
+
+async function pollState(){
+  if (!IS_SERVER) return;
+  try {
+    const res  = await fetch('/api/state');
+    const data = await res.json();
+
+    document.getElementById("hudFps").textContent = "FPS: " + data.fps;
+
+    if (data.surgery_active){
+      const h=Math.floor(data.elapsed/3600), m=Math.floor((data.elapsed%3600)/60), s=data.elapsed%60;
+      document.getElementById("surgeryTimer").textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
+      document.getElementById("hudStatus").textContent = "SURGERY ACTIVE — Tool Tracking Running";
+      document.getElementById("surgeryRing").classList.add("active");
+      document.getElementById("btnStart").disabled = true;
+      document.getElementById("btnEnd").disabled   = false;
+      document.getElementById("btnEnd").classList.add("armed");
+    } else {
+      document.getElementById("surgeryRing").classList.remove("active");
+      document.getElementById("btnStart").disabled = false;
+      document.getElementById("btnEnd").disabled   = true;
+      document.getElementById("btnEnd").classList.remove("armed");
+    }
+
+    const thr = data.hold_threshold ?? _currentThreshold;
+
+    // Sync slider if server threshold differs from local (e.g. after reload)
+    if (Math.abs(thr - _currentThreshold) > 0.005) {
+      _syncThreshUI(Math.round(thr * 100));
+    }
+
+    TOOLS.forEach(t => {
+      updateToolRow(
+        t.id,
+        data.tool_states[t.id]    || 'on_table',
+        data.tool_timers[t.id]    || 0,
+        data.tool_pick_count[t.id]|| 0,
+        data.tool_scores    ? (data.tool_scores[t.id]    || 0) : 0,
+        thr
+      );
+    });
+
+    // Event log — append only new entries
+    const evtLog = document.getElementById("evtLog");
+    const newEvts = (data.events || []).filter(e => e.id > lastSeenEventId);
+    newEvts.forEach(e => {
+      if (e.id > lastSeenEventId) lastSeenEventId = e.id;
+      const line = document.createElement("div");
+      line.className = "log-line";
+      const lvl = ['ok','warn','ai','err',''].includes(e.level) ? e.level : '';
+      line.innerHTML = `<span class="log-ts">[${e.ts}]</span> <span class="log-${lvl}">${e.msg}</span>`;
+      evtLog.appendChild(line);
+    });
+    if (newEvts.length) evtLog.scrollTop = evtLog.scrollHeight;
+
+  } catch(e){
+    document.getElementById("hudStatus").textContent = "Cannot connect to server…";
+  }
+}
+
+if (IS_SERVER){
+  _fetchConfig();
+  setInterval(pollState, 600);
+  pollState();
+}
+
+// ── AI typing effect ───────────────────────────────────
+const AI_MSGS = [
+  "Scalpel held for 47 seconds — 1.3× the average surgical duration. I recommend reviewing the incision count.",
+  "Hemostat used 3 times, total 28 seconds. Within standard range. Procedure progressing normally.",
+  "Forceps and army-navy simultaneously detected in hand. Dual-hand manipulation is being monitored carefully.",
+  "Towel clip placed on table then immediately re-picked — possible positioning error. Recommend verification.",
+];
+let aiIdx = 0;
+function typeAI(){
+  const el  = document.getElementById("aiTypedText");
+  const msg = AI_MSGS[aiIdx++ % AI_MSGS.length];
+  el.textContent = "";
+  let i = 0;
+  const iv = setInterval(() => {
+    el.textContent += msg[i++];
+    if (i >= msg.length){ clearInterval(iv); setTimeout(typeAI, 4200); }
+  }, 26);
+}
+setTimeout(typeAI, 900);
+</script>
+</body>
+</html>

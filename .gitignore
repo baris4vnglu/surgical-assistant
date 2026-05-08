@@ -1,0 +1,35 @@
+# Model dosyaları (çok büyük)
+*.pt
+*.pth
+*.onnx
+hand_landmarker.task
+
+# Video/medya
+*.mp4
+*.avi
+*.mov
+
+# Oluşturulan raporlar
+*.csv
+*.xlsx
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# YOLO çıktıları
+runs/
+
+# Eğitim verisi
+data/
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code yerel ayarları
+.claude/
