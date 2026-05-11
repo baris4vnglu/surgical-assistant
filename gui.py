@@ -105,7 +105,7 @@ S = {
     'tool_states':     {t: 'on_table' for t in TOOLS},
     'tool_pick_count': {t: 0 for t in TOOLS},
     'prev_in_hand':    {t: False for t in TOOLS},
-    'held_history':    {t: deque(maxlen=7) for t in TOOLS},
+    'held_history':    {t: deque(maxlen=15) for t in TOOLS},
     'pre_tools':       {},
     'last_detected':   set(),
     'events':          [],
@@ -243,7 +243,8 @@ def _detect_loop():
         new_boxes      = []
         if MODEL_OK and model:
             try:
-                res = model(work, conf=0.35, verbose=False, imgsz=416)[0]
+                conf_thresh = 0.22 if detected_hands else 0.35
+                res = model(work, conf=conf_thresh, verbose=False, imgsz=640)[0]
                 for box in res.boxes:
                     c   = box.xyxy[0].tolist()
                     lbl = model.names[int(box.cls[0])].lower()
