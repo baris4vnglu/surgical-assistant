@@ -1,5 +1,4 @@
 import os, sys, io, time, threading
-from collections import deque
 from datetime import datetime
 
 # ── Tcl/Tk path fix for Windows venv ──────────────────────
@@ -48,29 +47,6 @@ except Exception as e:
     MODEL_OK = False
     print(f"[WARN] YOLO failed: {e}")
 
-# ── MediaPipe ──────────────────────────────────────────────
-HAND_LM = None
-_mp     = None
-try:
-    import mediapipe as _mp
-    from mediapipe.tasks import python as _mp_py
-    from mediapipe.tasks.python import vision as _mp_vis
-    HAND_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hand_landmarker.task")
-    if os.path.exists(HAND_PATH):
-        _base = _mp_py.BaseOptions(model_asset_path=HAND_PATH)
-        _opts = _mp_vis.HandLandmarkerOptions(
-            base_options=_base, num_hands=4,
-            min_hand_detection_confidence=0.4,
-            min_hand_presence_confidence=0.4,
-            min_tracking_confidence=0.4,
-            running_mode=_mp_vis.RunningMode.IMAGE,
-        )
-        HAND_LM = _mp_vis.HandLandmarker.create_from_options(_opts)
-        print("[OK] MediaPipe loaded")
-    else:
-        print("[INFO] hand_landmarker.task not found")
-except Exception as e:
-    print(f"[INFO] MediaPipe not available: {e}")
 
 # ── Excel ──────────────────────────────────────────────────
 try:
@@ -104,8 +80,6 @@ S = {
     'tool_timers':     {t: 0 for t in TOOLS},
     'tool_states':     {t: 'on_table' for t in TOOLS},
     'tool_pick_count': {t: 0 for t in TOOLS},
-    'prev_in_hand':    {t: False for t in TOOLS},
-    'held_history':    {t: deque(maxlen=15) for t in TOOLS},
     'pre_tools':       {},
     'last_detected':   set(),
     'events':          [],
@@ -113,8 +87,6 @@ S = {
     'fps':             0,
     '_fps_cnt':        0,
     '_fps_t':          time.time(),
-    'hold_threshold':  0.20,
-    'tool_scores':     {t: 0.0 for t in TOOLS},
 }
 
 # Ham kare (display thread okur — YOLO beklemeden)
@@ -134,21 +106,6 @@ def _evt(msg, level="ok"):
     if len(S['events']) > 120:
         del S['events'][:60]
 
-def _score(bh, bt):
-    hx1,hy1,hx2,hy2 = bh;  tx1,ty1,tx2,ty2 = bt
-    ix1=max(hx1,tx1); iy1=max(hy1,ty1); ix2=min(hx2,tx2); iy2=min(hy2,ty2)
-    inter = max(0,ix2-ix1)*max(0,iy2-iy1)
-    ta    = max((tx2-tx1)*(ty2-ty1), 1)
-    ha    = max((hx2-hx1)*(hy2-hy1), 1)
-    union = ta+ha-inter
-    cont  = inter/ta
-    tc_x  = (tx1+tx2)/2;  tc_y = (ty1+ty2)/2
-    cin   = float(hx1<=tc_x<=hx2 and hy1<=tc_y<=hy2)
-    iou   = inter/union if union else 0
-    hc_x  = (hx1+hx2)/2;  hc_y = (hy1+hy2)/2
-    hd    = max(((hx2-hx1)**2+(hy2-hy1)**2)**.5, 1)
-    prox  = max(0, 1-((tc_x-hc_x)**2+(tc_y-hc_y)**2)**.5/(hd*1.5))
-    return 0.40*cont + 0.30*cin + 0.20*iou + 0.10*prox
 
 STATUS_BGR = {
     'on_table': (80,  200,  80),
@@ -219,32 +176,13 @@ def _detect_loop():
                 S['_fps_cnt'] = 0
                 S['_fps_t']   = now
 
-        # MediaPipe el algılama
-        detected_hands = []
-        if HAND_LM and _mp:
-            try:
-                rgb    = cv2.cvtColor(work, cv2.COLOR_BGR2RGB)
-                mp_img = _mp.Image(image_format=_mp.ImageFormat.SRGB, data=rgb)
-                hr     = HAND_LM.detect(mp_img)
-                if hr.hand_landmarks:
-                    for lms in hr.hand_landmarks:
-                        xs = [l.x*w_f for l in lms]
-                        ys = [l.y*h_f for l in lms]
-                        p  = 25
-                        hx1=max(0,int(min(xs))-p);   hy1=max(0,int(min(ys))-p)
-                        hx2=min(w_f,int(max(xs))+p); hy2=min(h_f,int(max(ys))+p)
-                        detected_hands.append([hx1,hy1,hx2,hy2])
-            except Exception:
-                pass
-
         # YOLO algılama
         detected_tools = {}
         detected_conf  = {}
         new_boxes      = []
         if MODEL_OK and model:
             try:
-                conf_thresh = 0.22 if detected_hands else 0.35
-                res = model(work, conf=conf_thresh, verbose=False, imgsz=640)[0]
+                res = model(work, conf=0.35, verbose=False, imgsz=640)[0]
                 for box in res.boxes:
                     c   = box.xyxy[0].tolist()
                     lbl = model.names[int(box.cls[0])].lower()
@@ -266,47 +204,24 @@ def _detect_loop():
         # Durum güncelleme
         with _lock:
             S['last_detected'] = set(detected_tools.keys())
-            s_active  = S['surgery_active']
-            threshold = S['hold_threshold']
-
-        live_scores = {}
-        for tool in TOOLS:
-            if tool in detected_tools and detected_hands:
-                live_scores[tool] = round(
-                    max(_score(h, detected_tools[tool]) for h in detected_hands), 3)
-            else:
-                live_scores[tool] = 0.0
-
-        held_raw = {tool: live_scores[tool] >= threshold for tool in TOOLS} if s_active else {}
-
-        with _lock:
-            S['tool_scores'].update(live_scores)
+            s_active = S['surgery_active']
 
         if s_active:
             with _lock:
                 for tool in TOOLS:
-                    in_view  = tool in detected_tools
-                    raw_held = held_raw.get(tool, False)
-                    S['held_history'][tool].append(raw_held)
-                    is_held = sum(S['held_history'][tool]) > len(S['held_history'][tool]) / 2
-                    prev    = S['prev_in_hand'][tool]
+                    in_view = tool in detected_tools
+                    prev_state = S['tool_states'][tool]
                     if in_view:
-                        if is_held:
-                            S['tool_timers'][tool] += 1
-                            S['tool_states'][tool]  = 'in_hand'
-                            if not prev:
-                                S['tool_pick_count'][tool] += 1
-                                _evt(f"{TOOL_LABELS[tool]} picked up "
-                                     f"(#{S['tool_pick_count'][tool]})", "ok")
-                        else:
-                            if prev:
-                                _evt(f"{TOOL_LABELS[tool]} released", "")
-                            S['tool_states'][tool] = 'on_table'
+                        S['tool_timers'][tool] += 1
+                        S['tool_states'][tool]  = 'in_hand'
+                        if prev_state != 'in_hand':
+                            S['tool_pick_count'][tool] += 1
+                            _evt(f"{TOOL_LABELS[tool]} detected "
+                                 f"(#{S['tool_pick_count'][tool]})", "ok")
                     else:
-                        if S['tool_states'][tool] == 'in_hand':
+                        if prev_state == 'in_hand':
                             S['tool_states'][tool] = 'missing'
                             _evt(f"WARNING: {TOOL_LABELS[tool]} disappeared!", "warn")
-                    S['prev_in_hand'][tool] = is_held
 
 
 # ── Colours ────────────────────────────────────────────────
@@ -378,23 +293,6 @@ class App(tk.Tk):
         tk.Label(panel, textvariable=self._timer_var,
                  bg=BG_PANEL, fg=CYAN, font=('Consolas', 20, 'bold')
                  ).pack(pady=6)
-        self._sep(panel)
-
-        # Sensitivity
-        self._section(panel, "DETECTION SENSITIVITY")
-        sens = tk.Frame(panel, bg=BG_PANEL)
-        sens.pack(fill=tk.X, padx=12, pady=(0,2))
-        tk.Label(sens, text="Loose", bg=BG_PANEL, fg=TEXT_DIM,
-                 font=('Segoe UI', 7)).pack(side=tk.LEFT)
-        self._thresh = tk.DoubleVar(value=0.20)
-        s = ttk.Scale(sens, from_=0.05, to=0.80, variable=self._thresh,
-                      orient=tk.HORIZONTAL, command=self._on_thresh)
-        s.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=6)
-        tk.Label(sens, text="Strict", bg=BG_PANEL, fg=TEXT_DIM,
-                 font=('Segoe UI', 7)).pack(side=tk.LEFT)
-        self._thresh_lbl = tk.Label(panel, text="0.20",
-                                     bg=BG_PANEL, fg=ACCENT, font=('Consolas', 9, 'bold'))
-        self._thresh_lbl.pack()
         self._sep(panel)
 
         # Tool status
@@ -537,13 +435,6 @@ class App(tk.Tk):
 
         self.after(400, self._tick_state)
 
-    # ── Threshold ─────────────────────────────────────────
-    def _on_thresh(self, val):
-        v = round(float(val), 2)
-        self._thresh_lbl.config(text=f"{v:.2f}")
-        with _lock:
-            S['hold_threshold'] = v
-
     # ── Surgery control ───────────────────────────────────
     def _start(self):
         with _lock:
@@ -555,8 +446,6 @@ class App(tk.Tk):
                 S['tool_timers'][t]     = 0
                 S['tool_states'][t]     = 'on_table'
                 S['tool_pick_count'][t] = 0
-                S['prev_in_hand'][t]    = False
-                S['held_history'][t].clear()
             S['pre_tools'] = {t: (t in S['last_detected']) for t in TOOLS}
             present = [t for t in TOOLS if S['pre_tools'].get(t)]
             _evt("=== SURGERY STARTED ===", "ok")
