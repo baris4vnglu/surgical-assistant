@@ -39,7 +39,7 @@ from PIL import Image, ImageTk
 # ── YOLO ──────────────────────────────────────────────────
 try:
     from ultralytics import YOLO
-    MODEL_PATH = r"C:\Users\baris\Downloads\best (4).pt"
+    MODEL_PATH = r"C:\Users\baris\Downloads\best (3).pt"
     model = YOLO(MODEL_PATH)
     MODEL_OK = True
     print("[OK] YOLO model loaded")
