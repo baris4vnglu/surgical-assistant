@@ -1,4 +1,4 @@
-import os, sys, io, time, threading
+import os, sys, io, time, threading, collections
 from datetime import datetime
 
 # ── Tcl/Tk path fix for Windows venv ──────────────────────
@@ -38,7 +38,7 @@ from PIL import Image, ImageTk
 # ── YOLO ──────────────────────────────────────────────────
 try:
     from ultralytics import YOLO
-    MODEL_PATH = r"C:\Users\baris\Downloads\best (3).pt"
+    MODEL_PATH = r"C:\Users\baris\Downloads\weights.pt"
     model = YOLO(MODEL_PATH)
     MODEL_OK = True
     print("[OK] YOLO model loaded")
@@ -57,17 +57,33 @@ try:
 except ImportError:
     EXCEL_OK = False
 
+# ── Detection enhancements ────────────────────────────────
+_clahe             = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+_recent_detections = collections.deque(maxlen=8)   # temporal smoothing penceresi
+
+CONF_THRESH = 0.25   # düşük eşik → daha fazla aday, temporal smoothing filtreler
+NMS_IOU     = 0.45   # çakışan kutu filtresi
+INFER_SIZE  = 800    # 640→800: küçük aletlerde belirgin iyileşme
+SMOOTH_MIN  = 3      # 8 frame'den en az 3'ünde görülmeli → false positive azaltır
+
+
+def _preprocess(frame):
+    """CLAHE + unsharp masking: kontrast ve kenar netliği."""
+    lab     = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    l       = _clahe.apply(l)
+    out     = cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
+    blur    = cv2.GaussianBlur(out, (0, 0), 3)
+    return cv2.addWeighted(out, 1.5, blur, -0.5, 0)
+
 # ── Camera source ──────────────────────────────────────────
-# Webcam          : CAMERA_SOURCE = 0
-# IP Webcam       : CAMERA_SOURCE = "http://192.168.3.45:8080/video"
-# DroidCam        : CAMERA_SOURCE = 1
-CAMERA_SOURCE = "http://192.168.3.45:8080/video"
+CAMERA_SOURCE = 0   # bilgisayar kamerası
 
 # ── Tools ─────────────────────────────────────────────────
 TOOLS = [
-    "army_navy","bulldog","castroviejo","clamp","forceps","frazier",
+    "army_navy","bulldog","castroviejo","forceps","frazier",
     "hemostat","iris","mayo_metz","needle","potts","richardson",
-    "scalpel","towel_clip","weitlaner","yankauer","scissors",
+    "scalpel","towel_clip","weitlaner","yankauer",
 ]
 
 TOOL_LABELS = {t: t.replace("_", " ").title() for t in TOOLS}
@@ -109,18 +125,16 @@ def _evt(msg, level="ok"):
 
 STATUS_BGR = {
     'on_table': (80,  200,  80),
-    'in_hand':  (73,   81, 248),
-    'missing':  (34,  153, 210),
+    'in_use':   (73,   81, 248),
 }
 
 # ── Thread 1: Sadece kamera okuma (mümkün olan en hızlı) ──
 def _open_cap():
-    cap = cv2.VideoCapture(CAMERA_SOURCE, cv2.CAP_FFMPEG)
-    if isinstance(CAMERA_SOURCE, int):
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        cap.set(cv2.CAP_PROP_FPS,          60)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    cap = cv2.VideoCapture(CAMERA_SOURCE)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FPS,          30)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE,   1)
     return cap
 
 def _capture_loop():
@@ -133,7 +147,7 @@ def _capture_loop():
         if not ret:
             fail_count += 1
             if fail_count > 30:
-                print(f"[WARN] Reconnecting: {CAMERA_SOURCE}")
+                print("[WARN] Kamera okunamıyor, yeniden bağlanılıyor...")
                 cap.release()
                 time.sleep(1.0)
                 cap = _open_cap()
@@ -142,11 +156,6 @@ def _capture_loop():
                 time.sleep(0.03)
             continue
         fail_count = 0
-        # IP kamera buffer birikimini temizle: birkaç eski kareyi at
-        for _ in range(2):
-            ret2, f2 = cap.read()
-            if ret2:
-                frame = f2
         with _raw_lock:
             _raw_frame = frame
     cap.release()
@@ -176,13 +185,19 @@ def _detect_loop():
                 S['_fps_cnt'] = 0
                 S['_fps_t']   = now
 
-        # YOLO algılama
+        # Kontrast + kenar netleştirme
+        work = _preprocess(work)
+
+        # YOLO algılama — ByteTrack + TTA
         detected_tools = {}
         detected_conf  = {}
         new_boxes      = []
         if MODEL_OK and model:
             try:
-                res = model(work, conf=0.35, verbose=False, imgsz=640)[0]
+                res = model.track(work, conf=CONF_THRESH, iou=NMS_IOU,
+                                  verbose=False, imgsz=INFER_SIZE,
+                                  persist=True, tracker="bytetrack.yaml",
+                                  augment=True)[0]
                 for box in res.boxes:
                     c   = box.xyxy[0].tolist()
                     lbl = model.names[int(box.cls[0])].lower()
@@ -192,7 +207,7 @@ def _detect_loop():
                             detected_tools[lbl] = c
                             detected_conf[lbl]  = cf
                     with _lock:
-                        bc = STATUS_BGR.get(S['tool_states'].get(lbl,'on_table'), (88,166,255))
+                        bc = STATUS_BGR.get(S['tool_states'].get(lbl, 'on_table'), (88, 166, 255))
                     x1,y1,x2,y2 = int(c[0]),int(c[1]),int(c[2]),int(c[3])
                     new_boxes.append((x1, y1, x2, y2, lbl, bc, cf))
             except Exception:
@@ -201,27 +216,31 @@ def _detect_loop():
         with _det_lock:
             _det_boxes = new_boxes
 
-        # Durum güncelleme
+        # Temporal smoothing: son 8 frame'den en az 3'ünde görülen = "algılandı"
+        _recent_detections.append(set(detected_tools.keys()))
+        counts = collections.Counter(t for fs in _recent_detections for t in fs)
+        smoothed_tools = {t for t, c in counts.items() if c >= SMOOTH_MIN}
+
+        # Durum güncelleme (smoothed sonuç kullanılır)
         with _lock:
-            S['last_detected'] = set(detected_tools.keys())
+            S['last_detected'] = smoothed_tools
             s_active = S['surgery_active']
 
         if s_active:
             with _lock:
                 for tool in TOOLS:
-                    in_view = tool in detected_tools
+                    in_view    = tool in smoothed_tools
                     prev_state = S['tool_states'][tool]
                     if in_view:
                         S['tool_timers'][tool] += 1
-                        S['tool_states'][tool]  = 'in_hand'
-                        if prev_state != 'in_hand':
+                        S['tool_states'][tool]  = 'in_use'
+                        if prev_state != 'in_use':
                             S['tool_pick_count'][tool] += 1
-                            _evt(f"{TOOL_LABELS[tool]} detected "
+                            _evt(f"{TOOL_LABELS[tool]} kullanımda "
                                  f"(#{S['tool_pick_count'][tool]})", "ok")
                     else:
-                        if prev_state == 'in_hand':
-                            S['tool_states'][tool] = 'missing'
-                            _evt(f"WARNING: {TOOL_LABELS[tool]} disappeared!", "warn")
+                        if prev_state == 'in_use':
+                            S['tool_states'][tool] = 'on_table'
 
 
 # ── Colours ────────────────────────────────────────────────
@@ -264,10 +283,22 @@ class App(tk.Tk):
         panel.pack(side=tk.RIGHT, fill=tk.Y)
         panel.pack_propagate(False)
 
+        # Logo
+        try:
+            _lpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "image.png")
+            _limg  = Image.open(_lpath).convert("RGBA")
+            _limg  = _limg.resize((56, 56), Image.LANCZOS)
+            _bg    = Image.new("RGBA", _limg.size, (22, 27, 34, 255))  # BG_PANEL
+            _bg.paste(_limg, mask=_limg.split()[3])
+            self._logo_imgtk = ImageTk.PhotoImage(_bg.convert("RGB"))
+            tk.Label(panel, image=self._logo_imgtk, bg=BG_PANEL).pack(pady=(12, 2))
+        except Exception:
+            self._logo_imgtk = None
+
         # Title
         tk.Label(panel, text="Smart Surgical Assistant",
                  bg=BG_PANEL, fg=ACCENT, font=('Segoe UI', 11, 'bold')
-                 ).pack(pady=(14,1))
+                 ).pack(pady=(4,1))
         tk.Label(panel, text="Near East University",
                  bg=BG_PANEL, fg=TEXT_DIM, font=('Segoe UI', 8)
                  ).pack(pady=(0,10))
@@ -415,8 +446,8 @@ class App(tk.Tk):
             st  = states.get(tool, 'on_table')
             sec = timers.get(tool, 0) // 10
             pk  = picks.get(tool, 0)
-            tag = 'g' if st == 'on_table' else ('r' if st == 'in_hand' else 'y')
-            badge = {'on_table': 'TABLE  ', 'in_hand': 'IN HAND', 'missing': 'MISSING'}.get(st, 'TABLE  ')
+            tag   = 'g' if st == 'on_table' else 'r'
+            badge = {'on_table': 'TABLE  ', 'in_use': 'USING  '}.get(st, 'TABLE  ')
             line = f"  {TOOL_LABELS[tool]:<17} [{badge}] {sec:>4}s  ×{pk}\n"
             self.tool_txt.insert(tk.END, line, tag)
         self.tool_txt.config(state=tk.DISABLED)
@@ -533,9 +564,8 @@ class App(tk.Tk):
         ws1.row_dimensions[4].height = 20
 
         status_map = {
-            'on_table': ("ON TABLE", green_font,  green_fill),
-            'in_hand':  ("IN HAND",  red_font,    red_fill),
-            'missing':  ("MISSING",  yellow_font, yellow_fill),
+            'on_table': ("ON TABLE", green_font, green_fill),
+            'in_use':   ("USING",    red_font,   red_fill),
         }
         for i, tool in enumerate(TOOLS):
             r   = i + 5
